@@ -1,0 +1,29 @@
+// ============================================================
+// Excessive Resource Creation or Deletion - Sentinel Analytics Rule
+// Source: Azure activity log (AzureActivity)
+// Flags callers with 5+ successful resource writes or deletes,
+// excluding Sentinel alert-rule and incident operations.
+// ============================================================
+
+let ResourceCreations = AzureActivity
+    | extend ClaimsJson = parse_json(Claims)
+    | extend ObjectIdentifier = tostring(ClaimsJson["http://schemas.microsoft.com/identity/claims/objectidentifier"])
+    | where OperationNameValue !startswith "MICROSOFT.SECURITYINSIGHTS/ALERTRULES"
+        and OperationNameValue !startswith "MICROSOFT.SECURITYINSIGHTS/INCIDENTS"
+    | where OperationNameValue endswith "WRITE"
+        and ActivityStatusValue == "Success"
+    | summarize NumberOfResourceCreations = count() by Caller, ObjectIdentifier, CallerIpAddress;
+let ResourceDeletions = AzureActivity
+    | extend ClaimsJson = parse_json(Claims)
+    | extend ObjectIdentifier = tostring(ClaimsJson["http://schemas.microsoft.com/identity/claims/objectidentifier"])
+    | where OperationNameValue !startswith "MICROSOFT.SECURITYINSIGHTS/ALERTRULES"
+        and OperationNameValue !startswith "MICROSOFT.SECURITYINSIGHTS/INCIDENTS"
+    | where OperationNameValue endswith "DELETE"
+        and ActivityStatusValue == "Success"
+    | summarize NumberOfResourceDeletions = count() by Caller, ObjectIdentifier, CallerIpAddress;
+ResourceCreations
+| join kind=fullouter ResourceDeletions on ObjectIdentifier, Caller, CallerIpAddress
+| project ObjectIdentifier, Caller, CallerIpAddress,
+          NumberOfResourceCreations, NumberOfResourceDeletions
+| where NumberOfResourceCreations >= 5 or NumberOfResourceDeletions >= 5
+| order by NumberOfResourceCreations desc, NumberOfResourceDeletions desc
