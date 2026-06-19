@@ -1,0 +1,13 @@
+// ============================================================
+// Resolve a flagged caller IP to its account and object ID
+// Replace the placeholder with the IP under investigation.
+// ============================================================
+
+AzureActivity
+| where CallerIpAddress == "<caller-ip>"
+| where TimeGenerated > ago(7d)
+| extend ClaimsJson = parse_json(Claims)
+| extend UPN = tostring(ClaimsJson["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"])
+| extend OID = tostring(ClaimsJson["http://schemas.microsoft.com/identity/claims/objectidentifier"])
+| project TimeGenerated, Caller, UPN, OID, OperationNameValue
+| distinct Caller, UPN, OID
